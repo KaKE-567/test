@@ -1,0 +1,107 @@
+name: Build ArtixV5 Kernel
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - lineage-17.1
+
+jobs:
+  build:
+    name: Build Kernel
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+        with:
+          ref: lineage-17.1
+          fetch-depth: 1
+
+      - name: Setup build environment
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            bc bison build-essential ccache curl flex git \
+            gnupg gperf libncurses5-dev libssl-dev libxml2-utils \
+            lzop pngcrush python3 rsync schedtool squashfs-tools \
+            xsltproc zip zlib1g-dev libelf-dev python-is-python3
+
+      - name: Setup Clang toolchain
+        run: |
+          mkdir -p $HOME/clang
+          curl -LSs "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman" -o antman
+          chmod +x antman
+          ./antman -S=latest --install-dir=$HOME/clang || true
+          # fallback: use AOSP clang
+          if [ ! -f "$HOME/clang/bin/clang" ]; then
+            CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86"
+            git clone --depth=1 --filter=blob:none --sparse \
+              https://github.com/llvm/llvm-project $HOME/llvm || true
+            # use prebuilt from zyc
+            mkdir -p $HOME/clang
+            curl -LSs "https://github.com/ZyCromerZ/Clang/releases/download/17.0.0-20230101-release/Clang-17.0.0-20230101.tar.gz" \
+              -o /tmp/clang.tar.gz
+            tar -C $HOME/clang -xzf /tmp/clang.tar.gz
+          fi
+          echo "$HOME/clang/bin" >> $GITHUB_PATH
+
+      - name: Integrate RKSU (rsuntk KernelSU)
+        run: |
+          curl -LSs "https://raw.githubusercontent.com/rsuntk/KernelSU/main/kernel/setup.sh" | bash -s main
+
+      - name: Apply RKSU manual hook patch (4.14)
+        run: |
+          curl -LSs "https://raw.githubusercontent.com/rksuorg/kernel_patches/master/manual_hook/kernel-4.14.patch" \
+            -o /tmp/rksu-hook.patch
+          patch -p1 < /tmp/rksu-hook.patch
+          echo "RKSU manual hook patch applied"
+
+      - name: Build kernel
+        run: |
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
+          export CC=clang
+          export CLANG_TRIPLE=aarch64-linux-gnu-
+          export PATH="$HOME/clang/bin:$PATH"
+
+          # setup out dir
+          mkdir -p out
+
+          make O=out ARCH=arm64 curtana_defconfig
+
+          make -j$(nproc --all) O=out \
+            ARCH=arm64 \
+            CC=clang \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            2>&1 | tee build.log
+
+      - name: Package kernel (AnyKernel3)
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 AnyKernel3
+          cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/ 2>/dev/null || \
+          cp out/arch/arm64/boot/Image.gz AnyKernel3/ 2>/dev/null || \
+          cp out/arch/arm64/boot/Image AnyKernel3/ 2>/dev/null
+          # grab dtbo if exists
+          [ -f out/arch/arm64/boot/dtbo.img ] && cp out/arch/arm64/boot/dtbo.img AnyKernel3/
+          cd AnyKernel3
+          zip -r9 ../ArtixV5-4.14.117-$(date +%Y%m%d-%H%M).zip * -x .git README.md
+
+      - name: Upload kernel zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: ArtixV5-Kernel
+          path: ArtixV5-*.zip
+          retention-days: 7
+
+      - name: Upload build log (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          retention-days: 3
