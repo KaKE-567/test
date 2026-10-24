@@ -27,24 +27,25 @@ jobs:
             lzop pngcrush python3 rsync schedtool squashfs-tools \
             xsltproc zip zlib1g-dev libelf-dev python-is-python3
 
-      - name: Setup Clang toolchain
+      - name: Setup Proton Clang 13
         run: |
           mkdir -p $HOME/clang
-          curl -LSs "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman" -o antman
-          chmod +x antman
-          ./antman -S=latest --install-dir=$HOME/clang || true
-          # fallback: use AOSP clang
-          if [ ! -f "$HOME/clang/bin/clang" ]; then
-            CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86"
-            git clone --depth=1 --filter=blob:none --sparse \
-              https://github.com/llvm/llvm-project $HOME/llvm || true
-            # use prebuilt from zyc
-            mkdir -p $HOME/clang
-            curl -LSs "https://github.com/ZyCromerZ/Clang/releases/download/17.0.0-20230101-release/Clang-17.0.0-20230101.tar.gz" \
-              -o /tmp/clang.tar.gz
-            tar -C $HOME/clang -xzf /tmp/clang.tar.gz
+          # Proton Clang 13 - latest release
+          PROTON_URL=$(curl -LSs "https://api.github.com/repos/kdrag0n/proton-clang/releases" \
+            | python3 -c "import sys,json; releases=json.load(sys.stdin); \
+              [print(a['browser_download_url']) for r in releases \
+              for a in r.get('assets',[]) \
+              if r['tag_name'].startswith('13') and a['name'].endswith('.tar.gz')]" \
+            | head -1)
+          if [ -z "$PROTON_URL" ]; then
+            # fallback: grab directly from known tag
+            PROTON_URL="https://github.com/kdrag0n/proton-clang/releases/download/13.0.0-20210522/proton-clang-13.0.0-20210522.tar.gz"
           fi
+          echo "Downloading Proton Clang 13 from: $PROTON_URL"
+          curl -LSs "$PROTON_URL" -o /tmp/proton-clang.tar.gz
+          tar -C $HOME/clang --strip-components=1 -xzf /tmp/proton-clang.tar.gz
           echo "$HOME/clang/bin" >> $GITHUB_PATH
+          clang --version
 
       - name: Integrate RKSU (rsuntk KernelSU)
         run: |
