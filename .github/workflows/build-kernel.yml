@@ -50,13 +50,6 @@ jobs:
         run: |
           curl -LSs "https://raw.githubusercontent.com/rsuntk/KernelSU/main/kernel/setup.sh" | bash -s main
 
-      - name: Apply RKSU manual hook patch (4.14)
-        run: |
-          curl -LSs "https://raw.githubusercontent.com/rksuorg/kernel_patches/master/manual_hook/kernel-4.14.patch" \
-            -o /tmp/rksu-hook.patch
-          patch -p1 < /tmp/rksu-hook.patch
-          echo "RKSU manual hook patch applied"
-
       - name: Build kernel
         run: |
           export ARCH=arm64
