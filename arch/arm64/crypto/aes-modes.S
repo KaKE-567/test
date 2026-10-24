@@ -279,6 +279,9 @@ AES_ENTRY(aes_ctr_encrypt)
 #if INTERLEAVE >= 2
 	cmn		w8, w4			/* 32 bit overflow? */
 	bcs		.Lctrloop
+	.align		4
+.Laddends_123:
+	.word		1, 2, 3, 0
 .LctrloopNx:
 	subs		w4, w4, #INTERLEAVE
 	bmi		.Lctr1x
@@ -297,7 +300,8 @@ AES_ENTRY(aes_ctr_encrypt)
 	eor		v1.16b, v1.16b, v3.16b
 	st1		{v0.16b-v1.16b}, [x0], #32
 #else
-	ldr		q8, =0x30000000200000001	/* addends 1,2,3[,0] */
+	adr		x7, .Laddends_123
+	ldr		q8, [x7]		/* addends 1,2,3[,0] */
 	dup		v7.4s, w8
 	mov		v0.16b, v4.16b
 	add		v7.4s, v7.4s, v8.4s
