@@ -29,23 +29,9 @@ jobs:
 
       - name: Setup Proton Clang 13
         run: |
-          mkdir -p $HOME/clang
-          # Proton Clang 13 - latest release
-          PROTON_URL=$(curl -LSs "https://api.github.com/repos/kdrag0n/proton-clang/releases" \
-            | python3 -c "import sys,json; releases=json.load(sys.stdin); \
-              [print(a['browser_download_url']) for r in releases \
-              for a in r.get('assets',[]) \
-              if r['tag_name'].startswith('13') and a['name'].endswith('.tar.gz')]" \
-            | head -1)
-          if [ -z "$PROTON_URL" ]; then
-            # fallback: grab directly from known tag
-            PROTON_URL="https://github.com/kdrag0n/proton-clang/releases/download/13.0.0-20210522/proton-clang-13.0.0-20210522.tar.gz"
-          fi
-          echo "Downloading Proton Clang 13 from: $PROTON_URL"
-          curl -LSs "$PROTON_URL" -o /tmp/proton-clang.tar.gz
-          tar -C $HOME/clang --strip-components=1 -xzf /tmp/proton-clang.tar.gz
+          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git $HOME/clang
           echo "$HOME/clang/bin" >> $GITHUB_PATH
-          clang --version
+          $HOME/clang/bin/clang --version
 
       - name: Integrate RKSU (rsuntk KernelSU)
         run: |
